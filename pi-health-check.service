@@ -1,0 +1,14 @@
+[Unit]
+Description=Raspberry Pi Internet Health Check Heartbeat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/pi_health_check
+ExecStart=%h/Projects/pi_health_check/heartbeat.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
