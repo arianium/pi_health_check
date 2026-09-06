@@ -1,74 +1,75 @@
 # Raspberry Pi Internet Health Check
 
-A tiny, dependency-free heartbeat service for a Raspberry Pi.
+A tiny, dependency-free internet connectivity watchdog for a Raspberry Pi.
 
-The Pi periodically makes an outbound HTTPS request to an UptimeRobot
-**Heartbeat** monitor. If the Pi's internet connection stops working, the
-heartbeat stops arriving and UptimeRobot can send an email alert.
+The Pi sends an HTTPS heartbeat to Healthchecks.io once per minute. If the
+Pi's internet connection stops working, the heartbeat stops arriving and
+Healthchecks.io sends an email alert.
 
-This does **not** expose the Pi to the internet and does not require a VPS.
+No VPS, inbound port, Python package, or public IP is required.
 
-## Architecture
+## Why Healthchecks.io?
+
+The free Hobbyist plan currently allows 20 monitored checks. Healthchecks.io
+is specifically designed around heartbeat/dead-man-switch monitoring.
+
+Official documentation:
+
+- https://healthchecks.io/
+- https://healthchecks.io/pricing/
+- https://healthchecks.io/docs/configuring_checks/
+- https://healthchecks.io/docs/faq/
+
+## 1. Create the Healthchecks.io check
+
+Create a free account at:
+
+https://healthchecks.io/
+
+Create a new check with these settings:
+
+- **Name:** `Raspberry Pi Internet`
+- **Period:** `1 minute`
+- **Grace time:** `5 minutes`
+- **Notification:** Email
+
+Healthchecks.io calls the generated URL the **Ping URL**.
+
+Copy the Ping URL. It will look approximately like:
 
 ```text
-Raspberry Pi
-    |
-    | HTTPS heartbeat every 60 seconds
-    v
-UptimeRobot Heartbeat Monitor
-    |
-    | no heartbeat for the configured grace period
-    v
-Email alert
+https://hc-ping.com/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
-The UptimeRobot Free plan currently supports heartbeat monitoring and checks
-every 5 minutes. The heartbeat URL is generated when you create the monitor.
-See UptimeRobot's current documentation for plan details:
+Keep this URL private. Anyone who has it can send a successful heartbeat to
+your check.
 
-- https://uptimerobot.com/pricing/
-- https://help.uptimerobot.com/en/articles/11358364-how-to-create-your-first-monitor-on-uptimerobot-quick-setup-guide
-- https://help.uptimerobot.com/en/articles/11358441-understanding-uptimerobot-monitor-types-a-guide-to-essential-services
-
-## 1. Create the UptimeRobot monitor
-
-Create an account at:
-
-https://uptimerobot.com/
-
-Then:
-
-1. Add a new monitor.
-2. Select **Heartbeat**.
-3. Give it a name such as `Raspberry Pi - internet`.
-4. Set the heartbeat/grace settings so that missing heartbeats for several
-   minutes counts as DOWN.
-5. Add your email as an alert contact.
-6. Create the monitor.
-7. Copy the unique heartbeat URL.
-
-Keep this URL private. Anyone who has it could potentially send a heartbeat
-and make the monitor appear healthy.
-
-Because the Free plan checks every 5 minutes, this setup is intended as a
-rough "the Pi has probably lost internet" alert rather than an instant
-network-failure detector.
+The 1-minute period plus 5-minute grace time means a sustained outage should
+be reported after roughly five minutes of missed heartbeats. There can be
+additional notification/delivery delay.
 
 ## 2. Clone this project on the Pi
 
-Connect to the Pi:
+From your host computer:
 
 ```bash
 ssh -i /home/arian/.ssh/id_ed25519_arianpi evilmorty@192.168.8.144
 ```
 
-Then clone the repository:
+Then on the Pi:
 
 ```bash
 mkdir -p /home/evilmorty/Projects
 cd /home/evilmorty/Projects
 git clone https://github.com/arianium/pi_health_check.git
 cd /home/evilmorty/Projects/pi_health_check
+```
+
+If you already cloned the previous version, update it instead:
+
+```bash
+cd /home/evilmorty/Projects/pi_health_check
+git pull
 ```
 
 ## 3. Install the health checker
@@ -79,64 +80,71 @@ Run:
 ./install.sh
 ```
 
-It will ask for the UptimeRobot heartbeat URL and store it locally in:
+It will ask for the Healthchecks.io Ping URL.
+
+The URL is stored locally in:
 
 ```text
 /home/evilmorty/Projects/pi_health_check/.env
 ```
 
-The file is created with mode `600` so only `evilmorty` can read it.
+The file is created with permissions `600`, so only `evilmorty` can read it.
 
-The installer creates a **systemd user service**. No Python, virtualenv,
-pip package, cron package, or other dependency is required.
+No Python environment or packages are needed. The checker uses the `curl`
+command already normally available on Raspberry Pi OS.
 
-## 4. Enable the service after reboot
+## 4. Start at boot
 
-The installer will tell you if user lingering needs to be enabled.
+The installer creates a systemd **user service**.
 
-If necessary, run:
-
-```bash
-sudo loginctl enable-linger evilmorty
-```
-
-This allows the user service to start at boot even when `evilmorty` is not
-logged into a graphical/session environment.
-
-Then check:
+Check it:
 
 ```bash
 systemctl --user status pi-health-check.service
 ```
 
-You should see:
+It should say:
 
 ```text
 Active: active (running)
 ```
 
+To make sure it starts after a reboot even when `evilmorty` has not logged in:
+
+```bash
+sudo loginctl enable-linger evilmorty
+```
+
+You only need to do that once.
+
 ## 5. Verify the heartbeat
 
-Follow the service logs:
+Follow the local logs:
 
 ```bash
 journalctl --user -u pi-health-check.service -n 100 -f
 ```
 
-You should see successful heartbeat messages approximately once per minute.
+You should see:
 
-You can also check the UptimeRobot dashboard. The monitor should become
-healthy after the first successful heartbeat.
+```text
+heartbeat OK
+```
+
+approximately once per minute.
+
+Also check the Healthchecks.io dashboard. The check should become `Up` after
+the first successful ping.
 
 ## Useful commands
 
-Check status:
+Status:
 
 ```bash
 systemctl --user status pi-health-check.service
 ```
 
-Check whether it is running:
+Machine-readable status:
 
 ```bash
 systemctl --user is-active pi-health-check.service
@@ -145,13 +153,7 @@ systemctl --user is-active pi-health-check.service
 Follow logs:
 
 ```bash
-journalctl --user -u pi-health-check.service -f
-```
-
-Show the last 100 log entries:
-
-```bash
-journalctl --user -u pi-health-check.service -n 100
+journalctl --user -u pi-health-check.service -n 100 -f
 ```
 
 Restart:
@@ -172,15 +174,13 @@ Start:
 systemctl --user start pi-health-check.service
 ```
 
-Disable it:
+Disable:
 
 ```bash
 systemctl --user disable --now pi-health-check.service
 ```
 
-## Updating from Git
-
-From the project directory:
+## Updating the project
 
 ```bash
 cd /home/evilmorty/Projects/pi_health_check
@@ -188,38 +188,40 @@ git pull
 systemctl --user restart pi-health-check.service
 ```
 
-The `.env` file is intentionally ignored by Git, so your heartbeat URL will
-not be overwritten by updates.
+`.env` is ignored by Git, so the secret Ping URL is not replaced by updates.
 
-## How it behaves during an outage
+## How an outage is detected
 
-The checker sends a heartbeat every 60 seconds.
+The service sends a heartbeat every 60 seconds.
 
 If the Pi loses internet:
 
-1. `curl` cannot reach UptimeRobot.
+1. `curl` cannot reach Healthchecks.io.
 2. The heartbeat is missed.
-3. The local service keeps running and tries again on the next cycle.
-4. UptimeRobot eventually marks the heartbeat monitor DOWN.
-5. UptimeRobot sends the configured email alert.
-6. Once internet returns, the next successful heartbeat tells UptimeRobot the
-   monitor is back UP.
+3. The local service stays running and retries.
+4. Healthchecks.io sees that the expected heartbeat has not arrived.
+5. After the configured grace period, Healthchecks.io marks the check down.
+6. Healthchecks.io sends the configured email alert.
+7. When the internet returns, the next successful heartbeat marks the check up.
 
-There is necessarily a delay: the Pi cannot notify an external service while
-its internet connection is down, and UptimeRobot's free monitoring operates
-on a 5-minute interval.
+The Pi cannot send an alert while its internet connection is down. That is why
+Healthchecks.io is useful: the monitoring and alerting happen outside the Pi.
 
-## Security / privacy notes
+## Security and privacy
 
-- The Pi makes only an outbound HTTPS request.
-- No inbound port needs to be opened on the router.
-- No SSH access is given to UptimeRobot.
-- No Pi credentials are sent.
-- The heartbeat URL is a secret credential for this monitor, so do not commit
-  `.env` or paste its contents into GitHub.
-- The checker sends no custom payload containing personal information.
-- The service uses `curl` with a timeout so a broken network cannot leave the
-  process hanging indefinitely.
+- The Pi only makes outbound HTTPS requests.
+- No inbound router port is required.
+- Healthchecks.io does not need SSH access to the Pi.
+- No Pi password, SSH key, or other credentials are sent.
+- The Ping URL is a secret token and should be treated like a password for
+  this monitor.
+- Do not commit `.env` or paste the Ping URL into GitHub.
+- The heartbeat request contains no custom personal information.
+- `curl` has a timeout so a broken network cannot leave the checker stuck
+  indefinitely.
+
+Healthchecks.io states that it is open source and can also be self-hosted if
+you ever want to operate the monitoring service yourself.
 
 ## Files
 

@@ -23,31 +23,39 @@ fi
 
 if [[ -f "${ENV_FILE}" ]]; then
     echo "An existing .env was found."
-    read -r -p "Replace the existing heartbeat URL? [y/N] " answer
-    if [[ ! "${answer}" =~ ^[Yy]$ ]]; then
-        echo "Keeping existing .env."
-    else
-        read -r -s -p "Paste the UptimeRobot heartbeat URL: " HEARTBEAT_URL
+    read -r -p "Replace the existing Healthchecks.io Ping URL? [y/N] " answer
+
+    if [[ "${answer}" =~ ^[Yy]$ ]]; then
+        read -r -s -p "Paste the Healthchecks.io Ping URL: " PING_URL
         echo
-        [[ -n "${HEARTBEAT_URL}" ]] || { echo "Heartbeat URL cannot be empty." >&2; exit 1; }
+        [[ -n "${PING_URL}" ]] || {
+            echo "Ping URL cannot be empty." >&2
+            exit 1
+        }
+
         cat > "${ENV_FILE}" <<EOF
-# Secret UptimeRobot heartbeat URL.
+# Secret Healthchecks.io Ping URL.
 # Do not commit this file.
-HEARTBEAT_URL=${HEARTBEAT_URL}
+HEALTHCHECKS_PING_URL=${PING_URL}
 HEARTBEAT_INTERVAL_SECONDS=60
 HEARTBEAT_TIMEOUT_SECONDS=20
 EOF
         chmod 600 "${ENV_FILE}"
+    else
+        echo "Keeping existing .env."
     fi
 else
-    read -r -s -p "Paste the UptimeRobot heartbeat URL: " HEARTBEAT_URL
+    read -r -s -p "Paste the Healthchecks.io Ping URL: " PING_URL
     echo
-    [[ -n "${HEARTBEAT_URL}" ]] || { echo "Heartbeat URL cannot be empty." >&2; exit 1; }
+    [[ -n "${PING_URL}" ]] || {
+        echo "Ping URL cannot be empty." >&2
+        exit 1
+    }
 
     cat > "${ENV_FILE}" <<EOF
-# Secret UptimeRobot heartbeat URL.
+# Secret Healthchecks.io Ping URL.
 # Do not commit this file.
-HEARTBEAT_URL=${HEARTBEAT_URL}
+HEALTHCHECKS_PING_URL=${PING_URL}
 HEARTBEAT_INTERVAL_SECONDS=60
 HEARTBEAT_TIMEOUT_SECONDS=20
 EOF
